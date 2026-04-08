@@ -1,0 +1,211 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  SYSTEM_ADMIN
+  HOSPITAL_STAFF
+  PHARMACY_STAFF
+  SUPPLIER
+}
+
+enum POStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SENT_TO_SUPPLIER
+  CONFIRMED
+  DISPATCHED
+  PARTIALLY_DELIVERED
+  DELIVERED
+  CANCELLED
+}
+
+enum StockTransactionType {
+  IN
+  OUT
+  ADJUSTMENT
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id           Int       @id @default(autoincrement())
+  name         String
+  email        String    @unique
+  password     String
+  role         Role      @default(HOSPITAL_STAFF)
+  supplier     Supplier? @relation(fields: [supplierId], references: [id])
+  supplierId   Int?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+
+  notifications Notification[]
+  purchaseOrders PurchaseOrder[] @relation("CreatedBy")
+  approvedOrders PurchaseOrder[] @relation("ApprovedBy")
+  grns           GoodsReceipt[]
+}
+
+model Supplier {
+  id             Int       @id @default(autoincrement())
+  name           String
+  contactPerson  String?
+  email          String?
+  phone          String?
+  address        String?   @db.Text
+  paymentTerms   String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+
+  users          User[]
+  products       SupplierProduct[]
+  purchaseOrders PurchaseOrder[]
+}
+
+model ProductCategory {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  products Product[]
+}
+
+model Product {
+  id             Int              @id @default(autoincrement())
+  name           String
+  sku            String           @unique
+  description    String?          @db.Text
+  unit           String
+  reorderLevel   Int              @default(0)
+  isActive       Boolean          @default(true)
+  category       ProductCategory  @relation(fields: [categoryId], references: [id])
+  categoryId     Int
+  createdAt      DateTime         @default(now())
+
+  suppliers      SupplierProduct[]
+  poItems        PurchaseOrderItem[]
+  grnItems       GoodsReceiptItem[]
+  stockLevels    StockLevel[]
+  transactions   StockTransaction[]
+}
+
+model SupplierProduct {
+  id         Int      @id @default(autoincrement())
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  supplierId Int
+  product    Product  @relation(fields: [productId], references: [id])
+  productId  Int
+  unitCost   Decimal  @db.Decimal(10, 2)
+  leadDays   Int      @default(7)
+
+  @@unique([supplierId, productId])
+}
+
+model PurchaseOrder {
+  id             Int        @id @default(autoincrement())
+  poNumber       String     @unique
+  supplier       Supplier   @relation(fields: [supplierId], references: [id])
+  supplierId     Int
+  status         POStatus   @default(DRAFT)
+  department     String?
+  notes          String?    @db.Text
+  totalAmount    Decimal    @default(0) @db.Decimal(10, 2)
+  createdBy      User       @relation("CreatedBy", fields: [createdById], references: [id])
+  createdById    Int
+  approvedBy     User?      @relation("ApprovedBy", fields: [approvedById], references: [id])
+  approvedById   Int?
+  approvedAt     DateTime?
+  sentAt         DateTime?
+  confirmedAt    DateTime?
+  dispatchedAt   DateTime?
+  deliveredAt    DateTime?
+  cancelledAt    DateTime?
+  dispatchRef    String?
+  driverName     String?
+  vehicleNo      String?
+  expectedDelivery DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  items          PurchaseOrderItem[]
+  grns           GoodsReceipt[]
+}
+
+model PurchaseOrderItem {
+  id         Int           @id @default(autoincrement())
+  po         PurchaseOrder @relation(fields: [poId], references: [id])
+  poId       Int
+  product    Product       @relation(fields: [productId], references: [id])
+  productId  Int
+  qty        Int
+  unitCost   Decimal       @db.Decimal(10, 2)
+  total      Decimal       @db.Decimal(10, 2)
+  receivedQty Int          @default(0)
+}
+
+model GoodsReceipt {
+  id          Int           @id @default(autoincrement())
+  grnNumber   String        @unique
+  po          PurchaseOrder @relation(fields: [poId], references: [id])
+  poId        Int
+  receivedBy  User          @relation(fields: [receivedById], references: [id])
+  receivedById Int
+  notes       String?       @db.Text
+  receivedAt  DateTime      @default(now())
+
+  items       GoodsReceiptItem[]
+}
+
+model GoodsReceiptItem {
+  id          Int          @id @default(autoincrement())
+  grn         GoodsReceipt @relation(fields: [grnId], references: [id])
+  grnId       Int
+  product     Product      @relation(fields: [productId], references: [id])
+  productId   Int
+  receivedQty Int
+  batchNo     String?
+  expiryDate  DateTime?
+  condition   String       @default("Good")
+  unitCost    Decimal      @db.Decimal(10, 2)
+}
+
+model StockLevel {
+  id           Int      @id @default(autoincrement())
+  product      Product  @relation(fields: [productId], references: [id])
+  productId    Int      @unique
+  currentStock Int      @default(0)
+  updatedAt    DateTime @updatedAt
+}
+
+model StockTransaction {
+  id          Int                  @id @default(autoincrement())
+  product     Product              @relation(fields: [productId], references: [id])
+  productId   Int
+  type        StockTransactionType
+  qty         Int
+  reference   String?
+  notes       String?              @db.Text
+  createdBy   Int
+  createdAt   DateTime             @default(now())
+}
+
+model Notification {
+  id        Int                @id @default(autoincrement())
+  user      User               @relation(fields: [userId], references: [id])
+  userId    Int
+  title     String
+  message   String             @db.Text
+  link      String?
+  status    NotificationStatus @default(UNREAD)
+  createdAt DateTime           @default(now())
+}
