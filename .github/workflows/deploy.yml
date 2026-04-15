@@ -31,19 +31,12 @@ jobs:
             cd /home/ubuntu/inventory-backend
 
             # Setup DB and dedicated user via sudo mysql
-            sudo mysql <<'SQLEOF'
-CREATE DATABASE IF NOT EXISTS hms_inventory CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'inv_user'@'localhost' IDENTIFIED BY 'InvPass2026';
-GRANT ALL PRIVILEGES ON hms_inventory.* TO 'inv_user'@'localhost';
-FLUSH PRIVILEGES;
-SQLEOF
+            sudo mysql -e "CREATE DATABASE IF NOT EXISTS hms_inventory CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+            sudo mysql -e "CREATE USER IF NOT EXISTS 'inv_user'@'localhost' IDENTIFIED BY 'InvPass2026';"
+            sudo mysql -e "GRANT ALL PRIVILEGES ON hms_inventory.* TO 'inv_user'@'localhost'; FLUSH PRIVILEGES;"
 
             # Always write .env with correct credentials
-            cat > .env <<'ENVEOF'
-DATABASE_URL=mysql://inv_user:InvPass2026@localhost:3306/hms_inventory
-JWT_SECRET=inventory_super_secret_jwt_2026
-PORT=5001
-ENVEOF
+            printf 'DATABASE_URL=mysql://inv_user:InvPass2026@localhost:3306/hms_inventory\nJWT_SECRET=inventory_super_secret_jwt_2026\nPORT=5001\n' > .env
 
             npm install --omit=dev
             npx prisma generate
