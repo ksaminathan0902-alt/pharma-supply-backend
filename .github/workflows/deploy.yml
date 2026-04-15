@@ -38,6 +38,7 @@ jobs:
             fi
 
             # Create the inventory DB if not exists
+            sudo mysql -e "CREATE DATABASE IF NOT EXISTS hms_inventory CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null || \
             mysql -u root -e "CREATE DATABASE IF NOT EXISTS hms_inventory CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null || true
 
             npm install --omit=dev
