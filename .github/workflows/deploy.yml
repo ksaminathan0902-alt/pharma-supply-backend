@@ -8,18 +8,47 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Deploy to AWS EC2
-        uses: appleboy/ssh-action@master
+      - name: Copy files to server
+        uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.AWS_HOST }}
-          username: ${{ secrets.AWS_USER }}
-          key: ${{ secrets.AWS_SSH_KEY }}
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "src/,prisma/,package.json,package-lock.json"
+          target: /home/ubuntu/inventory-backend
+          strip_components: 0
+
+      - name: Install, migrate and restart
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /var/www/hms-inventory-backend
-            git pull origin main
-            npm ci --omit=dev
+            cd /home/ubuntu/inventory-backend
+
+            # Create .env if not exists
+            if [ ! -f .env ]; then
+              echo "DATABASE_URL=mysql://root:@localhost:3306/hms_inventory" > .env
+              echo "JWT_SECRET=inventory_super_secret_jwt_2026" >> .env
+              echo "PORT=5001" >> .env
+            fi
+
+            # Create the inventory DB if not exists
+            mysql -u root -e "CREATE DATABASE IF NOT EXISTS hms_inventory CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null || true
+
+            npm install --omit=dev
             npx prisma generate
             npx prisma migrate deploy || true
-            pm2 restart hms-inventory-backend || pm2 start src/index.js --name hms-inventory-backend
+
+            pm2 describe hms-inventory-backend > /dev/null 2>&1 \
+              && pm2 restart hms-inventory-backend \
+              || pm2 start src/index.js --name hms-inventory-backend
+
+            pm2 save
+
+            sleep 2
+            curl -sf http://localhost:5001/api/health && echo "✅ Inventory backend deployed OK"
